@@ -1,0 +1,237 @@
+---
+title: "Cleaning_nba"
+format: html
+---
+
+## Functions to use
+- `nba_leaguedashplayershotlocations()`
+- `nba_leaguedashplayerptshot()`
+- `nba_leaguedashteamptshot()`
+- `nba_leaguedashteamshotlocations()`
+- `nba_shotchartdetail()`
+- `load_nba_pbp()`
+- `nba_commonplayerinfo()`
+
+## EDA
+
+```{r}
+library(tidyverse)
+library(hoopR)
+```
+
+Getting Player IDs
+
+```{r}
+players <- nba_commonallplayers(is_only_current_season = 1)
+all_player_ids <- players$CommonAllPlayers%>%
+  pull(PERSON_ID)
+```
+
+Running script to get all shot chart data for all players and all games of 2025 nba season
+
+ACQUIRED THURSDAY NOVEMBER 6 2025.
+
+```{r}
+re_run_date <- "2025-11-06"
+```
+
+
+```{r}
+container <- vector("list", length(all_player_ids))
+
+#Calling to API for all player IDs
+for (i in seq_along(all_player_ids)){
+  container[[i]] <- nba_shotchartdetail(player_id = all_player_ids[i])
+}
+
+#Extracting just the data we want
+container2 <- vector("list", length(all_player_ids))
+for (i in seq_along(container)){
+  container2[[i]] <- container[[i]]$Shot_Chart_Detail
+}
+
+master_shot_data <- bind_rows(container2) 
+# write_csv(master_shot_data, "raw_shot_data_11_06.csv")
+```
+
+SCRIPT RERUN
+
+```{r}
+container <- vector("list", length(all_player_ids))
+
+#Calling to API for all player IDs
+for (i in seq_along(all_player_ids)){
+  container[[i]] <- nba_shotchartdetail(player_id = all_player_ids[i], date_from = "2025-11-15", date_to = today())
+}
+
+#Extracting just the data we want
+container2 <- vector("list", length(all_player_ids))
+for (i in seq_along(container)){
+  container2[[i]] <- container[[i]]$Shot_Chart_Detail
+}
+
+# Save new data to csv, then reload it as this automatically changes numeric columns to double. Can't bind_rows() without doing this.
+nba_data <- read_csv("raw_shot_data_11_15.csv")
+new_data <- container2 %>% bind_rows()
+write_csv(new_data, "raw_shot_data_12_03.csv")
+nba_data <- read_csv("raw_shot_data_11_15.csv")%>%
+  bind_rows(read_csv("raw_shot_data_12_03.csv"))
+```
+
+
+
+
+```{r}
+nba_data_regions <- nba_data%>%
+  mutate(region = case_when(
+    LOC_X >= -220 & LOC_X <= -80 & LOC_Y < 100 ~ "Left Mid-Range", #A
+    LOC_X <= 220 & LOC_X >= 80 & LOC_Y < 100 ~ "Right Mid-Range", #B
+    LOC_X <=-220 & LOC_Y < 100 ~ "Left Corner 3", #C
+    LOC_X > 220 & LOC_Y < 100 ~ "Right Corner 3", #D
+    LOC_Y > 340 ~ "Backcourt", #E
+    LOC_X <= -80 & LOC_Y>= 100 & sqrt((LOC_X)^2+(LOC_Y)^2) < 237.5 ~ "Left Wing Mid-Range", #F
+    LOC_X > -80 & LOC_X <= 80 & LOC_Y >=150 & sqrt((LOC_X)^2+(LOC_Y)^2) < 237.5 ~ "Center Mid-Range", #G
+    LOC_X >= 80 & LOC_Y>= 100 & sqrt((LOC_X)^2+(LOC_Y)^2) < 237.5 ~ "Right Wing Mid-Range", #H
+    sqrt(LOC_X^2+LOC_Y^2) < 40 ~ "Restricted Area", #I
+    LOC_Y <= 340 & LOC_X > -80 & LOC_X < 80 & sqrt((LOC_X)^2+(LOC_Y)^2) > 237.5 ~ "Above the Break 3", #J
+    LOC_X <= -80 & LOC_Y <= 340 & LOC_Y >=100 & sqrt((LOC_X)^2+(LOC_Y)^2) > 237.5 ~ "Left Wing 3", #K
+    LOC_X >= 80 & LOC_Y <= 340 & LOC_Y >=100 & sqrt((LOC_X)^2+(LOC_Y)^2) > 237.5 ~ "Right Wing 3", #L
+    .default = "In the Paint (Non-RA)" #M
+  ), .before = LOC_X)
+
+
+```
+
+
+
+```{r}
+write_csv(nba_data_regions, "shots_by_region_12_03.csv")
+```
+
+
+```{r}
+library(tidyverse)
+library(hoopR)
+data1 <- read_csv("shots_by_region_12_03.csv")
+
+```
+
+```{r}
+stuff <- nba_leaguedashoppptshot(league_id = '00', season = year_to_season(most_recent_nba_season() - 1))[[1]]
+
+data1%>%
+  left_join(stuff%>% select(TEAM_NAME, TEAM_ABBREVIATION), by = join_by(HTM == TEAM_ABBREVIATION))%>%
+  left_join(stuff%>% select(TEAM_NAME, TEAM_ABBREVIATION), by = join_by(VTM == TEAM_ABBREVIATION))%>%
+  mutate(OPPONENT_NAME = if_else(TEAM_NAME.x == TEAM_NAME.y, TEAM_NAME, TEAM_NAME.y))
+```
+
+```{r}
+data1
+```
+
+
+```{r}
+season_yrs <- seq(2002,2026)
+
+# this_year <- load_nba_pbp(seasons = season_yrs)
+this_year <- load_nba_pbp(seasons = 2026)
+# player_data <- load_nba_player_box(
+#   seasons = season_yrs,
+#   dbConnection = NULL,
+#   tablename = NULL
+# )
+player_data <- load_nba_player_box(
+  seasons = 2026,
+  dbConnection = NULL,
+  tablename = NULL
+)
+
+player_data <- player_data%>%
+  group_by(athlete_id, season)%>%
+  summarize(name = min(athlete_display_name),
+            position = min(athlete_position_name),
+            image = min(athlete_headshot_href),
+            team_name = min(team_display_name))%>%
+  ungroup()
+
+player_data_passer <- player_data%>%
+  rename(name_2 = name,
+         position_2 = position,
+         image_2 = image,
+         athlete_id_2 = athlete_id,
+         team_name_2 = team_name,
+         season_2 = season)
+
+initial_this_yr <- this_year%>%
+  select(text, short_description, away_score, home_score, period_number, clock_display_value, scoring_play, score_value, team_id, athlete_id_1, athlete_id_2, athlete_id_3, shooting_play, points_attempted, season, home_team_id, home_team_name, home_team_abbrev, away_team_id, away_team_name, away_team_abbrev, clock_minutes, clock_seconds, coordinate_x, coordinate_y, game_date, season_type)%>%
+  rename(coordinate_y = coordinate_x,
+         LOC_X = coordinate_y)%>%
+  filter(shooting_play == TRUE,
+         !str_detect(text, "free throw"),
+         score_value != 1)%>%
+  left_join(player_data, by = c("athlete_id_1" = "athlete_id",
+                                "season" = "season"))%>%
+  relocate(name, .after = 1)%>%
+  left_join(player_data_passer, by = c("athlete_id_2" = "athlete_id_2",
+                                       "season" = "season_2"))%>%
+  mutate(LOC_Y = -1*(abs(coordinate_y)-41.75), .before = coordinate_y)
+  
+
+nba_data_regions_2 <- initial_this_yr%>%
+  mutate(region = case_when(
+    LOC_X >= -22 & LOC_X <= -8 & LOC_Y < 10 ~ "Left Mid-Range", #A
+    LOC_X <= 22 & LOC_X >= 8 & LOC_Y < 10 ~ "Right Mid-Range", #B
+    LOC_X <=-22 & LOC_Y < 10 ~ "Left Corner 3", #C
+    LOC_X > 22 & LOC_Y < 10 ~ "Right Corner 3", #D
+    LOC_Y > 34 ~ "Backcourt", #E
+    LOC_X <= -8 & LOC_Y>= 10 & sqrt((LOC_X)^2+(LOC_Y)^2) < 23.75 ~ "Left Wing Mid-Range", #F
+    LOC_X > -8 & LOC_X <= 8 & LOC_Y >=15 & sqrt((LOC_X)^2+(LOC_Y)^2) < 23.75 ~ "Center Mid-Range", #G
+    LOC_X >= 8 & LOC_Y>= 10 & sqrt((LOC_X)^2+(LOC_Y)^2) < 23.75 ~ "Right Wing Mid-Range", #H
+    sqrt(LOC_X^2+LOC_Y^2) < 4 ~ "Restricted Area", #I
+    LOC_Y <= 34 & LOC_X > -8 & LOC_X < 8 & sqrt((LOC_X)^2+(LOC_Y)^2) > 23.75 ~ "Above the Break 3", #J
+    LOC_X <= -8 & LOC_Y <= 34 & LOC_Y >=10 & sqrt((LOC_X)^2+(LOC_Y)^2) > 23.75 ~ "Left Wing 3", #K
+    LOC_X >= 8 & LOC_Y <= 34 & LOC_Y >=10 & sqrt((LOC_X)^2+(LOC_Y)^2) > 23.75 ~ "Right Wing 3", #L
+    .default = "In the Paint (Non-RA)" #M
+  ), .before = LOC_X)
+
+# nba_data_regions_2%>%
+#   summarize(min(LOC_Y), max(LOC_Y))
+
+# summary_2 <- nba_data_regions_2%>%
+#   filter(season == 2026)%>%
+#   group_by(region)%>%
+#   summarize(total2 = n(),
+#             proportion2 = total2/nrow(nba_data_regions_2%>%filter(season == 2026)))%>%
+#   arrange(desc(proportion2))
+# 
+# data1%>%
+#   group_by(region)%>%
+#   summarize(total = n(),
+#             proportion = total/nrow(data1))%>%
+#   arrange(desc(proportion))%>%
+#   left_join(summary_2, join_by(region))
+nba_data_regions_2 <- nba_data_regions_2%>%
+  mutate(assisted = if_else(!is.na(name_2) & scoring_play, TRUE, FALSE),
+         blocked = if_else(!is.na(name_2) & !scoring_play, TRUE, FALSE))
+write_csv(nba_data_regions_2, "data/raw/shots_by_region_02_10.csv")
+shots <- read_csv("data/raw/shots_by_region_02_10.csv")
+
+# write_csv(tiny_shots, "data/raw/tiny_shots.csv")
+
+
+# write_csv(player_data, "data/raw/player_images.csv")
+initial_this_yr%>%
+  arrange(LOC_Y)
+
+nba_data_regions_2%>%
+  colnames()
+```
+
+
+NOTES:
+
+Preseason values ARE included, season_type = 2 includes both preseason and regular season
+Postseason values ARE included, season_type = 3
+Play-in tournament values ARE included, season_type = 5
+
+Assists, blocks, shots are all almost perfectly accurate, referenced with Basketball Reference.
