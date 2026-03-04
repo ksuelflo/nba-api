@@ -724,7 +724,7 @@ function(player_name) {
   sql <- "
     SELECT
       name,
-      image,
+      image
     FROM shots
     WHERE name = ?
     LIMIT 1
@@ -819,12 +819,14 @@ function(req, res){
 
 con <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "https://nba-api-data-2026.s3.us-east-2.amazonaws.com/shots.duckdb"
+  dbdir = "data/db/shots.duckdb",
+  read_only = TRUE
 )
 
 conPlayer <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "https://nba-api-data-2026.s3.us-east-2.amazonaws.com/player.duckdb"
+  dbdir = "data/db/player.duckdb",
+  read_only = TRUE
 )
 
 # Build cache when API loads — con must already be defined above this line
