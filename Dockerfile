@@ -14,4 +14,4 @@ RUN curl -L https://nba-api-data-2026.s3.us-east-2.amazonaws.com/player.duckdb -
 EXPOSE 8000
 
 # CMD R -e "pr <- plumber::plumb('api/plumber.R'); pr$run(host='0.0.0.0', port=8000)"
-CMD ["Rscript", "start.R"]
+CMD ["Rscript", "start2.R"]
