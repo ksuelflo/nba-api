@@ -47,61 +47,77 @@ cosine_similarity <- function(a, b) {
 }
 
 build_zone_cache <- function(con, min_attempts = 200) {
-  
+
   message("Building zone frequency cache...")
-  
-  sql <- "
-    SELECT name, season, region
-    FROM shots
-    WHERE region != 'Backcourt'
+
+  # Aggregate in SQL — avoids loading millions of raw rows into R
+  season_sql <- "
+    WITH qualifying AS (
+      SELECT name, season
+      FROM shots
+      WHERE region != 'Backcourt'
+      GROUP BY name, season
+      HAVING COUNT(*) >= ?
+    )
+    SELECT s.name, s.season, s.region, COUNT(*) AS zone_count
+    FROM shots s
+    INNER JOIN qualifying q ON s.name = q.name AND s.season = q.season
+    WHERE s.region != 'Backcourt'
+    GROUP BY s.name, s.season, s.region
+    ORDER BY s.name, s.season, s.region
   "
-  all_shots <- dbGetQuery(con, sql)
-  
-  # Filter to qualifying player-seasons
-  attempt_counts <- all_shots %>%
-    group_by(name, season) %>%
-    summarise(n = n(), .groups = "drop") %>%
-    filter(n >= min_attempts)
-  
-  qualifying_shots <- all_shots %>%
-    inner_join(attempt_counts %>% select(name, season), by = c("name", "season"))
-  
-  # Per-season vectors
-  season_cache  <- list()
-  season_groups <- qualifying_shots %>% group_by(name, season) %>% group_split()
-  
-  for (grp in season_groups) {
-    player <- grp$name[1]
-    szn    <- grp$season[1]
-    vec    <- compute_zone_vector(grp)
-    if (!is.null(vec)) {
+  season_agg <- dbGetQuery(con, season_sql, params = list(min_attempts))
+
+  season_cache <- list()
+  ps <- unique(season_agg[, c("name", "season")])
+  for (i in seq_len(nrow(ps))) {
+    player <- ps$name[i]
+    szn    <- ps$season[i]
+    grp    <- season_agg[season_agg$name == player & season_agg$season == szn, ]
+    counts <- setNames(grp$zone_count, grp$region)
+    vec    <- as.numeric(counts[ZONES])
+    vec[is.na(vec)] <- 0
+    total  <- sum(vec)
+    if (total >= 20) {
       key <- paste0(player, "||", szn)
-      season_cache[[key]] <- list(name = player, season = szn, vector = vec)
+      season_cache[[key]] <- list(name = player, season = szn, vector = vec / total)
     }
   }
-  
-  # Career vectors (all seasons combined)
-  career_qualifying <- all_shots %>%
-    group_by(name) %>%
-    filter(n() >= min_attempts) %>%
-    ungroup()
-  
-  career_cache  <- list()
-  career_groups <- career_qualifying %>% group_by(name) %>% group_split()
-  
-  for (grp in career_groups) {
-    player <- grp$name[1]
-    vec    <- compute_zone_vector(grp)
-    if (!is.null(vec)) {
-      career_cache[[player]] <- list(name = player, vector = vec)
+
+  career_sql <- "
+    WITH qualifying AS (
+      SELECT name
+      FROM shots
+      WHERE region != 'Backcourt'
+      GROUP BY name
+      HAVING COUNT(*) >= ?
+    )
+    SELECT s.name, s.region, COUNT(*) AS zone_count
+    FROM shots s
+    INNER JOIN qualifying q ON s.name = q.name
+    WHERE s.region != 'Backcourt'
+    GROUP BY s.name, s.region
+    ORDER BY s.name, s.region
+  "
+  career_agg <- dbGetQuery(con, career_sql, params = list(min_attempts))
+
+  career_cache <- list()
+  for (player in unique(career_agg$name)) {
+    grp    <- career_agg[career_agg$name == player, ]
+    counts <- setNames(grp$zone_count, grp$region)
+    vec    <- as.numeric(counts[ZONES])
+    vec[is.na(vec)] <- 0
+    total  <- sum(vec)
+    if (total >= 20) {
+      career_cache[[player]] <- list(name = player, vector = vec / total)
     }
   }
-  
+
   message(sprintf(
     "Zone cache built: %d player-seasons, %d career profiles",
     length(season_cache), length(career_cache)
   ))
-  
+
   list(season = season_cache, career = career_cache)
 }
 
