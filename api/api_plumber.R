@@ -819,12 +819,12 @@ function(req, res){
 
 con <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "data/db/shots.duckdb"
+  dbdir = "https://nba-api-data-2026.s3.us-east-2.amazonaws.com/shots.duckdb"
 )
 
 conPlayer <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "data/db/player.duckdb"
+  dbdir = "https://nba-api-data-2026.s3.us-east-2.amazonaws.com/player.duckdb"
 )
 
 # Build cache when API loads — con must already be defined above this line
