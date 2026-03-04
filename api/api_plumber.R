@@ -819,13 +819,13 @@ function(req, res){
 
 con <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "data/db/shots.duckdb",
+  dbdir = "/app/data/db/shots.duckdb",
   read_only = TRUE
 )
 
 conPlayer <- dbConnect(
   duckdb::duckdb(),
-  dbdir = "data/db/player.duckdb",
+  dbdir = "/app/data/db/player.duckdb",
   read_only = TRUE
 )
 
