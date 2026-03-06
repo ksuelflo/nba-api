@@ -227,6 +227,11 @@ nba_data_regions_2%>%
 # 
 # nba_data_regions_2%>%
 #   colnames()
+
+nba_data_regions_2%>%
+  filter(name == "Cason Wallace")%>%
+  ggplot(aes(x = LOC_X, y = LOC_Y))+
+    geom_point()
 ```
 
 
