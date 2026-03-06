@@ -764,7 +764,8 @@ function(player_name) {
   sql <- "
     SELECT
       name,
-      image
+      image,
+      position
     FROM shots
     WHERE name = ?
     LIMIT 1
