@@ -213,18 +213,20 @@ nba_data_regions_2 <- initial_this_yr%>%
 nba_data_regions_2 <- nba_data_regions_2%>%
   mutate(assisted = if_else(!is.na(name_2) & scoring_play, TRUE, FALSE),
          blocked = if_else(!is.na(name_2) & !scoring_play, TRUE, FALSE))
-write_csv(nba_data_regions_2, "data/raw/shots_by_region_02_10.csv")
-shots <- read_csv("data/raw/shots_by_region_02_10.csv")
+# write_csv(nba_data_regions_2, "data/raw/shots_by_region_02_10.csv")
+# shots <- read_csv("data/raw/shots_by_region_02_10.csv")
 
 # write_csv(tiny_shots, "data/raw/tiny_shots.csv")
-
+nba_data_regions_2%>%
+  select(name, short_description, LOC_X, LOC_Y, scoring_play, score_value, game_date, clock_display_value)%>%
+  head()
 
 # write_csv(player_data, "data/raw/player_images.csv")
-initial_this_yr%>%
-  arrange(LOC_Y)
-
-nba_data_regions_2%>%
-  colnames()
+# initial_this_yr%>%
+#   arrange(LOC_Y)
+# 
+# nba_data_regions_2%>%
+#   colnames()
 ```
 
 

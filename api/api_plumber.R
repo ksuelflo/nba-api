@@ -446,6 +446,30 @@ function(season = "All") {
 
 #----------------------------------------------
 
+#* Position average FG% by region
+#* @param position:str
+#* @param season:str
+#* @get /position/regions
+function(position = "All", season = "All") {
+
+  sql <- "
+    SELECT
+      region,
+      COUNT(*) AS attempts,
+      SUM(scoring_play::INT) AS makes,
+      AVG(scoring_play::INT) AS fg_pct
+    FROM shots
+    WHERE (? = 'All' OR position = ?)
+      AND (? = 'All' OR season = ?)
+    GROUP BY region
+    ORDER BY region
+  "
+
+  dbGetQuery(con, sql, params = list(position, position, season, season))
+}
+
+#----------------------------------------------
+
 #* Team average FG% by region
 #* @param team_name:str
 #* @param season:str
