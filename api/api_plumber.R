@@ -2,11 +2,7 @@
 #* @apiTitle NBA Shot Chart API
 #* @apiDescription Query NBA shot data
 
-
-
-# ── Precompute KDE vectors at API startup ──────────────────────────────────────
-
-# Null coalescing operator
+#helper function
 `%||%` <- function(a, b) if (!is.null(a) && !is.na(a) && a != "") a else b
 library(dplyr)
 
@@ -36,7 +32,6 @@ compute_zone_vector <- function(shots_df) {
   total <- sum(vec)
   if (total == 0) return(NULL)
   
-  # Convert to shot frequency distribution
   vec / total
 }
 
@@ -50,7 +45,6 @@ build_zone_cache <- function(con, min_attempts = 200) {
 
   message("Building zone frequency cache...")
 
-  # Aggregate in SQL — avoids loading millions of raw rows into R
   season_sql <- "
     WITH qualifying AS (
       SELECT name, season
@@ -132,7 +126,6 @@ function(player_name, season = "All", n_results = 5) {
   
   n_results <- as.integer(n_results)
   
-  # ── 1. Get the query player's vector ──
   if (season == "All") {
     entry <- kde_cache$career[[player_name]]
   } else {
@@ -148,7 +141,6 @@ function(player_name, season = "All", n_results = 5) {
   
   query_vec <- entry$vector
   
-  # ── 2. Compute similarity against the right pool ──
   if (season == "All") {
     pool <- kde_cache$career
     pool <- pool[names(pool) != player_name]
@@ -164,12 +156,10 @@ function(player_name, season = "All", n_results = 5) {
   scores       <- sapply(pool, function(p) cosine_similarity(query_vec, p$vector))
   names(scores) <- sapply(pool, function(p) p$name)
   
-  # ── 3. Get top N ──
   top_idx    <- order(scores, decreasing = TRUE)[1:min(n_results, length(scores))]
   top_names  <- names(scores)[top_idx]
   top_scores <- scores[top_idx]
   
-  # ── 4. Fetch player images ──
   all_names    <- c(player_name, top_names)
   placeholders <- paste(rep("?", length(all_names)), collapse = ", ")
   
@@ -186,7 +176,6 @@ function(player_name, season = "All", n_results = 5) {
     profiles$name
   )
   
-  # ── 5. Build response ──
   similar <- lapply(seq_along(top_names), function(i) {
     list(
       name       = top_names[i],
@@ -414,7 +403,6 @@ function(season = "All", player = "All", team = "All", quarter = "All") {
     )
   )
   
-  # Convert single-row arrays → plain lists
   list(
     seasons  = res$seasons[[1]],
     players  = res$players[[1]],
@@ -573,7 +561,6 @@ function(player = "All", season = NULL) {
     return(dbGetQuery(con, sql, params = list(season)))
   }
   
-  # player + season
   sql <- "
     SELECT DISTINCT team_name
     FROM shots
@@ -623,7 +610,6 @@ function(team = "All", season = NULL) {
     return(dbGetQuery(con, sql, params = list(season)))
   }
   
-  # team + season
   sql <- "
     SELECT DISTINCT name
     FROM shots
@@ -791,7 +777,6 @@ function(player_name) {
 #* @get /player/shot-density
 function(player_name = "All", season = "All", period = "All", bandwidth = 2.5, resolution = 0.5) {
   
-  # Pull raw shot coordinates
   sql <- "
     SELECT LOC_X, LOC_Y
     FROM shots
@@ -830,12 +815,9 @@ function(player_name = "All", season = "All", period = "All", bandwidth = 2.5, r
   grid <- expand.grid(x = kde$x, y = kde$y)
   grid$density <- as.vector(kde$z)
   
-  # Normalize to [0, 1] so D3 color scale is easy to work with
   max_d <- max(grid$density)
   if (max_d > 0) grid$density <- grid$density / max_d
   
-  # Drop zero-density cells to reduce payload size
-  # grid <- grid[grid$density > 0.001, ]
   grid
 }
 
@@ -845,7 +827,6 @@ library(plumber)
 library(DBI)
 library(duckdb)
 
-# Enable CORS
 #* @filter cors
 function(req, res){
   res$setHeader("Access-Control-Allow-Origin", "*")
@@ -870,5 +851,4 @@ conPlayer <- dbConnect(
   read_only = TRUE
 )
 
-# Build cache when API loads — con must already be defined above this line
 kde_cache <- build_zone_cache(con)
